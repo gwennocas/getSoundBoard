@@ -5,7 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="Get SoundBoard">
+    Title="getSoundBoard">
 
     <Grid x:Name="Root" Background="#11141C" AllowDrop="True" DragOver="Root_DragOver" Drop="Root_Drop">
         <Grid.RowDefinitions>
@@ -29,7 +29,7 @@
                         <TextBlock Text="♫" FontSize="27" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" />
                     </Border>
                     <StackPanel>
-                        <TextBlock Text="GET SOUNDBOARD" FontSize="20" FontWeight="Bold" Foreground="White" />
+                        <TextBlock Text="getSoundBoard" FontSize="20" FontWeight="Bold" Foreground="White" />
                         <TextBlock Text="Seus sons, no momento certo." FontSize="12" Foreground="#A9B0C0" />
                     </StackPanel>
                 </StackPanel>

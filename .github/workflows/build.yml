@@ -19,7 +19,7 @@ jobs:
           dotnet-version: 10.0.x
       - name: Publish self-contained app
         shell: pwsh
-        run: dotnet publish GetSoundBoard.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -o artifacts/publish
+        run: dotnet publish getSoundBoard.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -o artifacts/publish
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
@@ -27,10 +27,10 @@ jobs:
         shell: pwsh
         run: |
           $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF.Substring(11) } else { '0.1.0' }
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DPublishDir=$((Resolve-Path artifacts/publish).Path)" "/DAppVersion=$version" installer/GetSoundBoard.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DPublishDir=$((Resolve-Path artifacts/publish).Path)" "/DAppVersion=$version" installer/getSoundBoard.iss
       - uses: actions/upload-artifact@v4
         with:
-          name: GetSoundBoard-win-x64
+          name: getSoundBoard-win-x64
           path: artifacts/installer/*.exe
       - name: Attach installer to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')

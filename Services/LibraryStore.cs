@@ -13,7 +13,7 @@ public sealed class LibraryStore
 
     private readonly JsonSerializerOptions _json = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
     private readonly SemaphoreSlim _saveGate = new(1, 1);
-    private readonly string _root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GetSoundBoard");
+    private readonly string _root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "getSoundBoard");
     private string DataPath => Path.Combine(_root, "library.json");
     public string AudioFolder => Path.Combine(_root, "Audio");
 
