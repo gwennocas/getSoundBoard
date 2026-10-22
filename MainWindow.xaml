@@ -1,0 +1,135 @@
+<Window
+    x:Class="GetSoundBoard.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Get SoundBoard">
+
+    <Grid x:Name="Root" Background="#11141C" AllowDrop="True" DragOver="Root_DragOver" Drop="Root_Drop">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="340" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#191E29" Padding="28,22" BorderBrush="#2A3040" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                    <Border Width="42" Height="42" CornerRadius="12" Background="#7276FF">
+                        <TextBlock Text="♫" FontSize="27" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" />
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="GET SOUNDBOARD" FontSize="20" FontWeight="Bold" Foreground="White" />
+                        <TextBlock Text="Seus sons, no momento certo." FontSize="12" Foreground="#A9B0C0" />
+                    </StackPanel>
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="StopButton" Content="■  Parar tudo  ·  Ctrl+Alt+Backspace" Click="StopButton_Click" Background="#3A2630" Foreground="#FFD8E1" Padding="18,10" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Grid.Column="0" Padding="28,26,20,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Spacing="6">
+                <TextBlock Text="Sua biblioteca" FontSize="28" FontWeight="Bold" Foreground="White" />
+                <TextBlock Text="Clique ou use um atalho enquanto joga. Solte arquivos MP3 ou WAV aqui para importar." TextWrapping="Wrap" Foreground="#A9B0C0" />
+            </StackPanel>
+            <Grid Grid.Row="1" Margin="0,23,0,18" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="SearchBox" PlaceholderText="Buscar um som..." TextChanged="SearchBox_TextChanged" MinWidth="180" />
+                <Button Grid.Column="1" x:Name="ImportButton" Content="+  Adicionar áudios" Click="ImportButton_Click" Background="#7276FF" Foreground="White" Padding="18,10" />
+            </Grid>
+            <Grid Grid.Row="2">
+                <GridView x:Name="SoundGrid" SelectionMode="None" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <GridView.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="218" Height="160" Margin="0,0,12,12" Padding="16" CornerRadius="15" Background="#222838" BorderBrush="#333B50" BorderThickness="1">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis" TextWrapping="WrapWholeWords" MaxLines="2" />
+                                    <TextBlock Grid.Row="1" Text="{Binding Hotkey}" Foreground="#ADB5CA" FontSize="12" Margin="0,0,0,11" />
+                                    <Grid Grid.Row="2" ColumnSpacing="7">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button Content="▶  Tocar" Tag="{Binding Id}" Click="PlayClip_Click" Background="#4146A5" Foreground="White" HorizontalAlignment="Stretch" />
+                                        <Button Grid.Column="1" Content="✎" ToolTipService.ToolTip="Editar" Tag="{Binding Id}" Click="EditClip_Click" />
+                                        <Button Grid.Column="2" Content="×" ToolTipService.ToolTip="Excluir" Tag="{Binding Id}" Click="DeleteClip_Click" />
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </GridView.ItemTemplate>
+                </GridView>
+                <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                    <TextBlock Text="♪" FontSize="58" Foreground="#7276FF" HorizontalAlignment="Center" />
+                    <TextBlock Text="Sua biblioteca começa aqui" FontSize="20" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" />
+                    <TextBlock Text="Adicione um MP3 ou WAV para criar o primeiro botão." Foreground="#A9B0C0" HorizontalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="1" Grid.Column="1" Background="#191E29" BorderBrush="#2A3040" BorderThickness="1,0,0,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Padding="24,28" Spacing="12">
+                    <TextBlock Text="Configuração de áudio" FontSize="21" FontWeight="Bold" Foreground="White" />
+                    <TextBlock Text="Escolha sua voz, onde você ouve os sons e o cabo virtual que envia tudo ao chat." Foreground="#A9B0C0" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <Border x:Name="FirstRunHint" Background="#2B3156" CornerRadius="10" Padding="12">
+                        <TextBlock Text="Primeiro uso: instale o VB-CABLE, escolha os três dispositivos e clique em Aplicar." Foreground="#E7E8FF" TextWrapping="Wrap" />
+                    </Border>
+                    <TextBlock Text="Seu microfone" Foreground="#D8DEEA" Margin="0,12,0,0" />
+                    <ComboBox x:Name="MicrophoneBox" DisplayMemberPath="Name" SelectedValuePath="Id" PlaceholderText="Escolha o microfone" HorizontalAlignment="Stretch" />
+                    <TextBlock Text="Seus alto-falantes ou fone" Foreground="#D8DEEA" Margin="0,7,0,0" />
+                    <ComboBox x:Name="SpeakerBox" DisplayMemberPath="Name" SelectedValuePath="Id" PlaceholderText="Escolha onde ouvir" HorizontalAlignment="Stretch" />
+                    <TextBlock Text="VB-CABLE Input" Foreground="#D8DEEA" Margin="0,7,0,0" />
+                    <ComboBox x:Name="CableBox" DisplayMemberPath="Name" SelectedValuePath="Id" PlaceholderText="Escolha o cabo virtual" HorizontalAlignment="Stretch" />
+                    <HyperlinkButton Content="Baixar VB-CABLE no site oficial ↗" Click="CableLink_Click" Padding="0,4" HorizontalAlignment="Left" />
+                    <TextBlock Text="No Discord/jogo, selecione CABLE Output como microfone." Foreground="#A9B0C0" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,7">
+                        <Button Content="Atualizar dispositivos" Click="RefreshDevices_Click" />
+                        <Button Content="Aplicar" Click="ApplyAudio_Click" Background="#7276FF" Foreground="White" />
+                    </StackPanel>
+                    <Rectangle Height="1" Fill="#343B4D" Margin="0,12" />
+                    <TextBlock Text="Volume dos sons" FontSize="16" FontWeight="SemiBold" Foreground="White" />
+                    <Grid Margin="0,8,0,0">
+                        <TextBlock Text="Nos seus alto-falantes" Foreground="#D8DEEA" />
+                        <TextBlock x:Name="SpeakerPercentText" Text="35%" Foreground="#ADB5CA" HorizontalAlignment="Right" />
+                    </Grid>
+                    <Slider x:Name="SpeakerVolumeSlider" Minimum="0" Maximum="100" Value="35" ValueChanged="VolumeSlider_ValueChanged" />
+                    <Grid Margin="0,5,0,0">
+                        <TextBlock Text="No microfone virtual" Foreground="#D8DEEA" />
+                        <TextBlock x:Name="MicPercentText" Text="70%" Foreground="#ADB5CA" HorizontalAlignment="Right" />
+                    </Grid>
+                    <Slider x:Name="MicVolumeSlider" Minimum="0" Maximum="100" Value="70" ValueChanged="VolumeSlider_ValueChanged" />
+                    <TextBlock Text="Sua voz mantém o volume definido no Windows. Ela não é reproduzida no seu fone pelo app." Foreground="#929BAE" TextWrapping="Wrap" Margin="0,9,0,0" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#191E29" BorderBrush="#2A3040" BorderThickness="0,1,0,0" Padding="24,10">
+            <TextBlock x:Name="StatusText" Text="Pronto para configurar o áudio." Foreground="#A9B0C0" TextTrimming="CharacterEllipsis" />
+        </Border>
+    </Grid>
+</Window>
