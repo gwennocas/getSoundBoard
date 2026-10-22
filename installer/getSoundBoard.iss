@@ -1,6 +1,6 @@
 #define AppName "getSoundBoard"
 #ifndef AppVersion
-  #define AppVersion "0.1.4"
+  #define AppVersion "0.1.5"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\artifacts\publish"
@@ -35,3 +35,14 @@ Name: desktopicon; Description: "Criar atalho na área de trabalho"; GroupDescri
 
 [Run]
 Filename: "{app}\getSoundBoard.exe"; Description: "Abrir {#AppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  StartupCommand: String;
+begin
+  if (CurUninstallStep = usUninstall) and
+     RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'getSoundBoard', StartupCommand) and
+     (CompareText(StartupCommand, '"' + ExpandConstant('{app}\getSoundBoard.exe') + '" --startup') = 0) then
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'getSoundBoard');
+end;

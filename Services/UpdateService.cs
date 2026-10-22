@@ -20,7 +20,7 @@ public sealed class UpdateService
         var versionText = informationalVersion?.Split('+', 2)[0];
         _currentVersion = Version.TryParse(versionText, out var parsed)
             ? parsed
-            : new Version(0, 1, 3);
+            : new Version(0, 1, 5);
     }
 
     public async Task<IReadOnlyList<AppRelease>> GetReleasesAsync(CancellationToken cancellationToken = default)
@@ -126,7 +126,7 @@ public sealed class UpdateService
 
     private static string CurrentAppVersion() =>
         Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-        ?? "0.1.3";
+        ?? "0.1.5";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 

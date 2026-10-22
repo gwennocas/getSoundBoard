@@ -119,6 +119,24 @@
                         <Button Content="Atualizar dispositivos" Click="RefreshDevices_Click" />
                         <Button Content="Aplicar" Click="ApplyAudio_Click" Background="#7276FF" Foreground="White" />
                     </StackPanel>
+                    <ToggleSwitch x:Name="NoiseSuppressionSwitch" Header="Supressão de ruído na voz" OffContent="Desligada" OnContent="Ligada" Toggled="NoiseSuppressionSwitch_Toggled" />
+                    <TextBlock Text="RNNoise age só no microfone, antes de misturar os sons." Foreground="#929BAE" TextWrapping="Wrap" />
+                    <Grid Margin="0,8,0,0">
+                        <TextBlock Text="Intensidade da supressão" Foreground="#D8DEEA" />
+                        <TextBlock x:Name="NoiseStrengthPercentText" Text="50%" Foreground="#ADB5CA" HorizontalAlignment="Right" />
+                    </Grid>
+                    <Slider x:Name="NoiseStrengthSlider" Minimum="0" Maximum="100" StepFrequency="5" Value="50" ValueChanged="NoiseStrengthSlider_ValueChanged" AutomationProperties.Name="Intensidade da supressão de ruído do microfone" />
+                    <TextBlock Text="Reduza se a voz começar a sumir. Em 0%, sua voz passa sem filtro." Foreground="#929BAE" TextWrapping="Wrap" />
+                    <Grid Margin="0,8,0,0">
+                        <TextBlock Text="Ganho da sua voz" Foreground="#D8DEEA" />
+                        <TextBlock x:Name="VoiceGainPercentText" Text="100%" Foreground="#ADB5CA" HorizontalAlignment="Right" />
+                    </Grid>
+                    <Slider x:Name="VoiceGainSlider" Minimum="0" Maximum="300" StepFrequency="5" Value="100" ValueChanged="VoiceGainSlider_ValueChanged" AutomationProperties.Name="Ganho da sua voz antes da supressão de ruído" />
+                    <TextBlock Text="100% mantém o nível original. Aumente para sua voz chegar mais forte ao filtro; valores altos podem distorcer." Foreground="#929BAE" TextWrapping="Wrap" />
+                    <ToggleSwitch x:Name="VoiceClaritySwitch" Header="Clareza da voz" OffContent="Desligada" OnContent="Ligada" Toggled="VoiceClaritySwitch_Toggled" Margin="0,8,0,0" />
+                    <TextBlock Text="Corta ruído grave e realça levemente a compreensão da fala. Age só no microfone, sem cortar sílabas." Foreground="#929BAE" TextWrapping="Wrap" />
+                    <ToggleSwitch x:Name="OverlapSoundsSwitch" Header="Sobrepor sons" OffContent="Desligado" OnContent="Ligado" Toggled="OverlapSoundsSwitch_Toggled" Margin="0,8,0,0" />
+                    <TextBlock Text="Permite tocar vários sons ao mesmo tempo. Parar tudo encerra todos." Foreground="#929BAE" TextWrapping="Wrap" />
                     <Rectangle Height="1" Fill="#343B4D" Margin="0,12" />
                     <TextBlock Text="Volume dos sons" FontSize="16" FontWeight="SemiBold" Foreground="White" />
                     <Grid Margin="0,8,0,0">
@@ -140,8 +158,10 @@
                         <Slider x:Name="MicVolumeSlider" Grid.Column="1" Minimum="0" Maximum="100" Value="70" ValueChanged="VolumeSlider_ValueChanged" VerticalAlignment="Center" AutomationProperties.Name="Volume dos sons junto à voz" />
                         <Button Grid.Column="2" Content="+" Width="38" Padding="0" Click="MicVolumeUp_Click" AutomationProperties.Name="Aumentar volume dos sons junto à voz" />
                     </Grid>
-                    <TextBlock Text="Sua voz mantém o volume definido no Windows. Ela não é reproduzida no seu fone pelo app." Foreground="#929BAE" TextWrapping="Wrap" Margin="0,9,0,0" />
+                    <TextBlock Text="O ganho da voz é separado do volume dos sons. Sua voz não é reproduzida no seu fone pelo app." Foreground="#929BAE" TextWrapping="Wrap" Margin="0,9,0,0" />
                     <TextBlock Text="Ao minimizar ou fechar, o app continua na área de notificação. Clique duas vezes no ícone para reabrir." Foreground="#929BAE" TextWrapping="Wrap" Margin="0,9,0,0" />
+                    <ToggleSwitch x:Name="StartWithWindowsSwitch" Header="Iniciar junto com o Windows" OffContent="Desligado" OnContent="Ligado" Toggled="StartWithWindowsSwitch_Toggled" Margin="0,12,0,0" />
+                    <TextBlock Text="Abre automaticamente na área de notificação quando você entra no Windows." Foreground="#929BAE" TextWrapping="Wrap" />
                 </StackPanel>
             </ScrollViewer>
         </Border>

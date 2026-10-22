@@ -13,6 +13,27 @@ public sealed record AudioDeviceOption(string Id, string Name);
 /// </summary>
 public sealed class AudioEngine : IDisposable
 {
+    private sealed class ClipPlayback : IDisposable
+    {
+        public required string Path { get; init; }
+        public required WaveStream SpeakerReader { get; init; }
+        public required WaveStream CableReader { get; init; }
+        public required VolumeSampleProvider SpeakerInput { get; init; }
+        public required VolumeSampleProvider CableInput { get; init; }
+        public EventHandler<SampleProviderEventArgs>? SpeakerEndedHandler { get; set; }
+        public EventHandler<SampleProviderEventArgs>? CableEndedHandler { get; set; }
+        public volatile bool SpeakerEnded;
+        public volatile bool CableEnded;
+
+        public bool IsFinished => SpeakerEnded && CableEnded;
+
+        public void Dispose()
+        {
+            SpeakerReader.Dispose();
+            CableReader.Dispose();
+        }
+    }
+
     private sealed class StandardFormatWaveProvider : IWaveProvider
     {
         private readonly IWaveProvider _source;
@@ -38,12 +59,9 @@ public sealed class AudioEngine : IDisposable
     private WasapiOut? _cableOutput;
     private MixingSampleProvider? _speakerMix;
     private MixingSampleProvider? _cableMix;
-    private WaveStream? _speakerReader;
-    private WaveStream? _cableReader;
-    private ISampleProvider? _speakerClipInput;
-    private ISampleProvider? _cableClipInput;
-    private VolumeSampleProvider? _speakerClipVolume;
-    private VolumeSampleProvider? _cableClipVolume;
+    private NoiseSuppressionSampleProvider? _voiceInput;
+    private VoiceClaritySampleProvider? _voiceClarity;
+    private readonly List<ClipPlayback> _activeClips = [];
     private string _microphoneId = "";
     private string _speakerId = "";
     private string _cableId = "";
@@ -105,12 +123,15 @@ public sealed class AudioEngine : IDisposable
                 };
                 _microphone.DataAvailable += MicrophoneOnDataAvailable;
                 var voice = ConvertToMixFormat(new StandardFormatWaveProvider(_voiceBuffer).ToSampleProvider());
-                _cableMix.AddMixerInput(voice);
+                _voiceInput = new NoiseSuppressionSampleProvider(voice, settings.NoiseSuppressionEnabled,
+                    (float)settings.MicrophoneGain, (float)settings.NoiseSuppressionStrength);
+                _voiceClarity = new VoiceClaritySampleProvider(_voiceInput, settings.VoiceClarityEnabled);
+                _cableMix.AddMixerInput(_voiceClarity);
 
                 _speakerOutput = new WasapiOut(speaker, AudioClientShareMode.Shared, true, 80);
                 _cableOutput = new WasapiOut(cable, AudioClientShareMode.Shared, true, 80);
-                _speakerOutput.Init(_speakerMix);
-                _cableOutput.Init(_cableMix);
+                _speakerOutput.Init(new PeakLimiterSampleProvider(_speakerMix));
+                _cableOutput.Init(new PeakLimiterSampleProvider(_cableMix));
                 _speakerOutput.Play();
                 _cableOutput.Play();
                 _microphone.StartRecording();
@@ -132,29 +153,56 @@ public sealed class AudioEngine : IDisposable
         catch (Exception) { /* A route change can dispose the buffer mid-callback. */ }
     }
 
-    public void PlayClip(string path, double speakerVolume, double microphoneVolume)
+    public void PlayClip(string path, double speakerVolume, double microphoneVolume, bool overlapSounds)
     {
         lock (_gate)
         {
             if (_speakerMix is null || _cableMix is null)
                 throw new InvalidOperationException("Configure os dispositivos de áudio primeiro.");
-            StopClipCore();
+            if (!overlapSounds) StopClipCore();
+            WaveStream? speakerReader = null;
+            WaveStream? cableReader = null;
+            VolumeSampleProvider? speakerInput = null;
+            VolumeSampleProvider? cableInput = null;
+            ClipPlayback? clip = null;
             try
             {
-                _speakerReader = AudioFileFormats.OpenReader(path);
-                _cableReader = AudioFileFormats.OpenReader(path);
-                _speakerClipVolume = new VolumeSampleProvider(ConvertToMixFormat((ISampleProvider)_speakerReader))
+                speakerReader = AudioFileFormats.OpenReader(path);
+                cableReader = AudioFileFormats.OpenReader(path);
+                speakerInput = new VolumeSampleProvider(ConvertToMixFormat(ToSampleProvider(speakerReader)))
                     { Volume = (float)Math.Clamp(speakerVolume, 0, 1) };
-                _cableClipVolume = new VolumeSampleProvider(ConvertToMixFormat((ISampleProvider)_cableReader))
+                cableInput = new VolumeSampleProvider(ConvertToMixFormat(ToSampleProvider(cableReader)))
                     { Volume = (float)Math.Clamp(microphoneVolume, 0, 1) };
-                _speakerClipInput = _speakerClipVolume;
-                _cableClipInput = _cableClipVolume;
-                _speakerMix.AddMixerInput(_speakerClipInput);
-                _cableMix.AddMixerInput(_cableClipInput);
+                clip = new ClipPlayback
+                {
+                    Path = path,
+                    SpeakerReader = speakerReader,
+                    CableReader = cableReader,
+                    SpeakerInput = speakerInput,
+                    CableInput = cableInput
+                };
+                clip.SpeakerEndedHandler = (_, args) =>
+                {
+                    if (ReferenceEquals(args.SampleProvider, clip.SpeakerInput)) clip.SpeakerEnded = true;
+                };
+                clip.CableEndedHandler = (_, args) =>
+                {
+                    if (ReferenceEquals(args.SampleProvider, clip.CableInput)) clip.CableEnded = true;
+                };
+                _speakerMix.MixerInputEnded += clip.SpeakerEndedHandler;
+                _cableMix.MixerInputEnded += clip.CableEndedHandler;
+                _speakerMix.AddMixerInput(speakerInput);
+                _cableMix.AddMixerInput(cableInput);
+                _activeClips.Add(clip);
             }
             catch
             {
-                StopClipCore();
+                if (clip?.SpeakerEndedHandler is not null) _speakerMix.MixerInputEnded -= clip.SpeakerEndedHandler;
+                if (clip?.CableEndedHandler is not null) _cableMix.MixerInputEnded -= clip.CableEndedHandler;
+                if (speakerInput is not null) _speakerMix.RemoveMixerInput(speakerInput);
+                if (cableInput is not null) _cableMix.RemoveMixerInput(cableInput);
+                speakerReader?.Dispose();
+                cableReader?.Dispose();
                 throw;
             }
         }
@@ -164,19 +212,62 @@ public sealed class AudioEngine : IDisposable
     {
         lock (_gate)
         {
-            if (_speakerClipVolume is not null) _speakerClipVolume.Volume = (float)Math.Clamp(speakerVolume, 0, 1);
-            if (_cableClipVolume is not null) _cableClipVolume.Volume = (float)Math.Clamp(microphoneVolume, 0, 1);
+            foreach (var clip in _activeClips)
+            {
+                clip.SpeakerInput.Volume = (float)Math.Clamp(speakerVolume, 0, 1);
+                clip.CableInput.Volume = (float)Math.Clamp(microphoneVolume, 0, 1);
+            }
         }
     }
 
-    public bool ClipHasFinished
+    public void SetNoiseSuppression(bool enabled)
     {
-        get
+        lock (_gate)
+            if (_voiceInput is not null) _voiceInput.Enabled = enabled;
+    }
+
+    public void SetMicrophoneGain(double gain)
+    {
+        lock (_gate)
+            if (_voiceInput is not null) _voiceInput.Gain = (float)gain;
+    }
+
+    public void SetNoiseSuppressionStrength(double strength)
+    {
+        lock (_gate)
+            if (_voiceInput is not null) _voiceInput.Strength = (float)strength;
+    }
+
+    public void SetVoiceClarity(bool enabled)
+    {
+        lock (_gate)
+            if (_voiceClarity is not null) _voiceClarity.Enabled = enabled;
+    }
+
+    public void SetOverlapSounds(bool enabled)
+    {
+        if (enabled) return;
+        lock (_gate)
+            foreach (var clip in _activeClips.Take(Math.Max(0, _activeClips.Count - 1)).ToArray())
+                RemoveClipCore(clip);
+    }
+
+    public bool RemoveFinishedClips()
+    {
+        lock (_gate)
         {
-            lock (_gate)
-                return _speakerReader is not null && _cableReader is not null &&
-                    _speakerReader.Position >= _speakerReader.Length && _cableReader.Position >= _cableReader.Length;
+            var finished = _activeClips.Where(c => c.IsFinished).ToArray();
+            foreach (var clip in finished)
+                RemoveClipCore(clip);
+            return finished.Length > 0 && _activeClips.Count == 0;
         }
+    }
+
+    public void StopClip(string path)
+    {
+        lock (_gate)
+            foreach (var clip in _activeClips.Where(c => c.Path == path).ToArray())
+                RemoveClipCore(clip);
     }
 
     public void StopClip()
@@ -186,16 +277,20 @@ public sealed class AudioEngine : IDisposable
 
     private void StopClipCore()
     {
-        if (_speakerClipInput is not null) _speakerMix?.RemoveMixerInput(_speakerClipInput);
-        if (_cableClipInput is not null) _cableMix?.RemoveMixerInput(_cableClipInput);
-        _speakerClipInput = null;
-        _cableClipInput = null;
-        _speakerClipVolume = null;
-        _cableClipVolume = null;
-        _speakerReader?.Dispose();
-        _cableReader?.Dispose();
-        _speakerReader = null;
-        _cableReader = null;
+        foreach (var clip in _activeClips.ToArray())
+            RemoveClipCore(clip);
+    }
+
+    private void RemoveClipCore(ClipPlayback clip)
+    {
+        if (clip.SpeakerEndedHandler is not null && _speakerMix is not null)
+            _speakerMix.MixerInputEnded -= clip.SpeakerEndedHandler;
+        if (clip.CableEndedHandler is not null && _cableMix is not null)
+            _cableMix.MixerInputEnded -= clip.CableEndedHandler;
+        _speakerMix?.RemoveMixerInput(clip.SpeakerInput);
+        _cableMix?.RemoveMixerInput(clip.CableInput);
+        _activeClips.Remove(clip);
+        clip.Dispose();
     }
 
     public bool DevicesAreAvailable()
@@ -240,10 +335,16 @@ public sealed class AudioEngine : IDisposable
         }
         _speakerOutput = null;
         _cableOutput = null;
+        _voiceInput?.Dispose();
+        _voiceInput = null;
+        _voiceClarity = null;
         _speakerMix = null;
         _cableMix = null;
         _microphoneId = _speakerId = _cableId = "";
     }
+
+    private static ISampleProvider ToSampleProvider(WaveStream reader) =>
+        reader is ISampleProvider sampleProvider ? sampleProvider : reader.ToSampleProvider();
 
     private static ISampleProvider ConvertToMixFormat(ISampleProvider input)
     {

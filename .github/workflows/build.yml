@@ -20,7 +20,7 @@ jobs:
       - name: Publish self-contained app
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF.Substring(11) } else { '0.1.4' }
+          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF.Substring(11) } else { ([xml](Get-Content getSoundBoard.csproj -Raw)).Project.PropertyGroup.Version }
           dotnet publish getSoundBoard.csproj -c Release -p:Platform=x64 -p:Version=$version -r win-x64 --self-contained true -o artifacts/publish
       - name: Install Inno Setup
         shell: pwsh
@@ -28,7 +28,7 @@ jobs:
       - name: Create installer
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF.Substring(11) } else { '0.1.4' }
+          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF.Substring(11) } else { ([xml](Get-Content getSoundBoard.csproj -Raw)).Project.PropertyGroup.Version }
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DPublishDir=$((Resolve-Path artifacts/publish).Path)" "/DAppVersion=$version" installer/getSoundBoard.iss
       - uses: actions/upload-artifact@v4
         with:
@@ -39,3 +39,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/installer/*.exe
+          generate_release_notes: true

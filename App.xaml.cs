@@ -16,5 +16,9 @@ public partial class App : Application
     {
         _window = new MainWindow();
         _window.Activate();
+        if (_window is MainWindow main &&
+            Environment.GetCommandLineArgs().Any(argument =>
+                string.Equals(argument, "--startup", StringComparison.OrdinalIgnoreCase)))
+            main.StartInTray();
     }
 }

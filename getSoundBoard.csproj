@@ -5,7 +5,7 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>GetSoundBoard</RootNamespace>
     <AssemblyName>getSoundBoard</AssemblyName>
-    <Version>0.1.4</Version>
+    <Version>0.1.5</Version>
     <Product>getSoundBoard</Product>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
@@ -24,6 +24,10 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
     <PackageReference Include="Concentus.Oggfile" Version="1.0.7" />
+    <PackageReference Include="YellowDogMan.RRNoise.NET" Version="0.1.9" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CopyWinUIResourcesToPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
     <ItemGroup>

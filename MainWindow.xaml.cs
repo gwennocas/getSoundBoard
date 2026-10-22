@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
     private readonly ObservableCollection<SoundClip> _visibleClips = [];
     private readonly HotkeyManager _hotkeys;
     private readonly UpdateService _updateService = new();
+    private readonly WindowsStartupService _windowsStartup = new();
     private readonly ObservableCollection<AppRelease> _releases = [];
     private TrayService? _tray;
     private readonly DispatcherTimer _healthTimer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -29,6 +30,9 @@ public sealed partial class MainWindow : Window
     private bool _hiddenInTray;
     private bool _exitRequested;
     private bool _updatesLoaded;
+    private bool _updatingStartupSwitch;
+    private DateTimeOffset _startupAudioRetryUntil;
+    private DateTimeOffset _nextStartupAudioAttempt;
 
     public MainWindow()
     {
@@ -57,8 +61,24 @@ public sealed partial class MainWindow : Window
 
         SpeakerVolumeSlider.Value = Math.Clamp(_settings.SpeakerVolume * 100, 0, 100);
         MicVolumeSlider.Value = Math.Clamp(_settings.MicrophoneVolume * 100, 0, 100);
+        VoiceGainSlider.Value = Math.Clamp(_settings.MicrophoneGain * 100, 0, 300);
+        NoiseStrengthSlider.Value = Math.Clamp(_settings.NoiseSuppressionStrength * 100, 0, 100);
+        NoiseSuppressionSwitch.IsOn = _settings.NoiseSuppressionEnabled;
+        VoiceClaritySwitch.IsOn = _settings.VoiceClarityEnabled;
+        OverlapSoundsSwitch.IsOn = _settings.OverlapSounds;
+        try
+        {
+            _windowsStartup.UpdateExecutablePathIfEnabled();
+            StartWithWindowsSwitch.IsOn = _windowsStartup.IsEnabled;
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Não foi possível verificar a inicialização com o Windows: {ex.Message}", true);
+        }
         SpeakerPercentText.Text = $"{SpeakerVolumeSlider.Value:0}%";
         MicPercentText.Text = $"{MicVolumeSlider.Value:0}%";
+        VoiceGainPercentText.Text = $"{VoiceGainSlider.Value:0}%";
+        NoiseStrengthPercentText.Text = $"{NoiseStrengthSlider.Value:0}%";
         FirstRunHint.Visibility = _settings.Onboarded ? Visibility.Collapsed : Visibility.Visible;
         RefreshVisibleClips();
         RefreshDevices();
@@ -113,8 +133,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var microphoneOptions = _audio.GetDevices(DataFlow.Capture)
-                .Where(d => !d.Name.Contains("CABLE Output", StringComparison.OrdinalIgnoreCase)).ToList();
+            var microphoneOptions = _audio.GetDevices(DataFlow.Capture);
             var outputOptions = _audio.GetDevices(DataFlow.Render);
             var speakerOptions = outputOptions
                 .Where(d => !d.Name.Contains("CABLE Input", StringComparison.OrdinalIgnoreCase)).ToList();
@@ -219,7 +238,7 @@ public sealed partial class MainWindow : Window
         if (clip is null) return;
         try
         {
-            _audio.PlayClip(_store.PathFor(clip), _settings.SpeakerVolume, _settings.MicrophoneVolume);
+            _audio.PlayClip(_store.PathFor(clip), _settings.SpeakerVolume, _settings.MicrophoneVolume, _settings.OverlapSounds);
             SetStatus($"Tocando: {clip.Title}");
         }
         catch (Exception ex) { SetStatus($"Não foi possível tocar {clip.Title}: {ex.Message}", true); }
@@ -241,22 +260,97 @@ public sealed partial class MainWindow : Window
         if (clip is null) return;
 
         var title = new TextBox { Text = clip.Title, Header = "Nome" };
-        var modifiers = new ComboBox { Header = "Combinação", ItemsSource = new[] { "Sem atalho", "Ctrl+Alt", "Ctrl+Shift", "Alt+Shift" }, HorizontalAlignment = HorizontalAlignment.Stretch };
-        var keys = new ComboBox { Header = "Tecla", ItemsSource = HotkeyKeys(), HorizontalAlignment = HorizontalAlignment.Stretch };
+        var modifierChoices = new[] { "Sem atalho", "Nenhum", "Ctrl", "Alt", "Shift", "Ctrl+Alt", "Ctrl+Shift", "Alt+Shift", "Ctrl+Alt+Shift" };
+        var modifiers = new ComboBox { Header = "Modificadores", ItemsSource = modifierChoices, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var keys = new ComboBox { Header = "Teclas comuns", ItemsSource = HotkeyKeys(), HorizontalAlignment = HorizontalAlignment.Stretch };
         var parts = clip.Hotkey.Split('+');
-        var currentModifiers = parts.Length >= 2 ? string.Join("+", parts.SkipLast(1)) : "Sem atalho";
-        modifiers.SelectedItem = new[] { "Ctrl+Alt", "Ctrl+Shift", "Alt+Shift" }.Contains(currentModifiers) ? currentModifiers : "Sem atalho";
-        keys.SelectedItem = parts.Length >= 2 ? parts[^1] : "F1";
-        if (keys.SelectedItem is null) keys.SelectedItem = "F1";
+        var selectedKey = clip.Hotkey.Length == 0 ? "F1" : parts[^1];
+        var currentModifiers = clip.Hotkey.Length == 0 ? "Sem atalho" :
+            parts.Length == 1 ? "Nenhum" : string.Join("+", parts.SkipLast(1));
+        modifiers.SelectedItem = modifierChoices.Contains(currentModifiers) ? currentModifiers : "Sem atalho";
+
+        var normalBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 49, 57, 76));
+        var selectedBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 91, 96, 215));
+        var numpadButtons = new Dictionary<string, Button>();
+        var numpad = new Grid { ColumnSpacing = 6, RowSpacing = 6 };
+        for (var i = 0; i < 4; i++)
+        {
+            numpad.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            numpad.RowDefinitions.Add(new RowDefinition { Height = new GridLength(42) });
+        }
+        var numpadLayout = new (string Code, string Label)[]
+        {
+            ("Num7", "7"), ("Num8", "8"), ("Num9", "9"), ("NumDivide", "/"),
+            ("Num4", "4"), ("Num5", "5"), ("Num6", "6"), ("NumMultiply", "*"),
+            ("Num1", "1"), ("Num2", "2"), ("Num3", "3"), ("NumSubtract", "−"),
+            ("Num0", "0"), ("NumDecimal", ". / ,"), ("NumAdd", "+"), ("NumEnter", "Enter")
+        };
+        for (var i = 0; i < numpadLayout.Length; i++)
+        {
+            var (code, label) = numpadLayout[i];
+            var button = new Button
+            {
+                Content = label,
+                Tag = code,
+                Background = normalBrush,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255)),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Padding = new Thickness(0)
+            };
+            button.Click += (_, _) =>
+            {
+                selectedKey = code;
+                keys.SelectedItem = null;
+                foreach (var pair in numpadButtons)
+                    pair.Value.Background = pair.Key == code ? selectedBrush : normalBrush;
+            };
+            Grid.SetRow(button, i / 4);
+            Grid.SetColumn(button, i % 4);
+            numpad.Children.Add(button);
+            numpadButtons.Add(code, button);
+        }
+        keys.SelectionChanged += (_, _) =>
+        {
+            if (keys.SelectedItem is not string key) return;
+            selectedKey = key;
+            foreach (var button in numpadButtons.Values) button.Background = normalBrush;
+        };
+        if (HotkeyManager.IsNumpadKey(selectedKey))
+            numpadButtons[selectedKey].Background = selectedBrush;
+        else
+        {
+            keys.SelectedItem = selectedKey;
+            if (keys.SelectedItem is null) keys.SelectedItem = "F1";
+        }
+
+        var numpadGroup = new Border
+        {
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 34, 40, 56)),
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(12),
+            Child = new StackPanel { Spacing = 9 }
+        };
+        var numpadContent = (StackPanel)numpadGroup.Child;
+        numpadContent.Children.Add(new TextBlock { Text = "Teclado numérico", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        numpadContent.Children.Add(numpad);
+        numpadContent.Children.Add(new TextBlock
+        {
+            Text = "As teclas físicas do numpad funcionam também com NumLock desligado. Conflitos externos de NumEnter não podem ser detectados.",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12
+        });
+
         var form = new StackPanel { Spacing = 14 };
         form.Children.Add(title);
         form.Children.Add(modifiers);
         form.Children.Add(keys);
+        form.Children.Add(numpadGroup);
         var dialog = new ContentDialog
         {
             XamlRoot = Root.XamlRoot,
             Title = "Editar som",
-            Content = form,
+            Content = new ScrollViewer { Content = form, MaxHeight = 560 },
             PrimaryButtonText = "Salvar",
             CloseButtonText = "Cancelar",
             DefaultButton = ContentDialogButton.Primary
@@ -264,7 +358,14 @@ public sealed partial class MainWindow : Window
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         var newTitle = title.Text.Trim();
         if (newTitle.Length == 0) { SetStatus("Digite um nome para o som.", true); return; }
-        var newHotkey = (string?)modifiers.SelectedItem == "Sem atalho" ? "" : $"{modifiers.SelectedItem}+{keys.SelectedItem}";
+        var selectedModifiers = (string?)modifiers.SelectedItem;
+        var newHotkey = selectedModifiers == "Sem atalho" ? "" :
+            selectedModifiers == "Nenhum" ? selectedKey : $"{selectedModifiers}+{selectedKey}";
+        if (newHotkey.Length > 0 && !HotkeyManager.TryParse(newHotkey, out _, out _))
+        {
+            SetStatus("Escolha um atalho válido. Teclas comuns precisam de Ctrl, Alt ou Shift.", true);
+            return;
+        }
         if (newHotkey.Length > 0 && _clips.Any(c => c.Id != clip.Id && string.Equals(c.Hotkey, newHotkey, StringComparison.OrdinalIgnoreCase)))
         {
             SetStatus($"{newHotkey} já pertence a outro som.", true);
@@ -299,7 +400,7 @@ public sealed partial class MainWindow : Window
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         try
         {
-            _audio.StopClip();
+            _audio.StopClip(_store.PathFor(clip));
             _store.DeleteFile(clip);
             _clips.Remove(clip);
             RefreshVisibleClips();
@@ -329,6 +430,11 @@ public sealed partial class MainWindow : Window
             CableInputId = cableId,
             SpeakerVolume = SpeakerVolumeSlider.Value / 100,
             MicrophoneVolume = MicVolumeSlider.Value / 100,
+            MicrophoneGain = VoiceGainSlider.Value / 100,
+            NoiseSuppressionEnabled = NoiseSuppressionSwitch.IsOn,
+            NoiseSuppressionStrength = NoiseStrengthSlider.Value / 100,
+            VoiceClarityEnabled = VoiceClaritySwitch.IsOn,
+            OverlapSounds = OverlapSoundsSwitch.IsOn,
             Onboarded = true
         };
         try
@@ -351,6 +457,71 @@ public sealed partial class MainWindow : Window
         _settings.MicrophoneVolume = MicVolumeSlider.Value / 100;
         _audio.SetVolumes(_settings.SpeakerVolume, _settings.MicrophoneVolume);
         await PersistAsync();
+    }
+
+    private async void NoiseSuppressionSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        _settings.NoiseSuppressionEnabled = NoiseSuppressionSwitch.IsOn;
+        _audio.SetNoiseSuppression(_settings.NoiseSuppressionEnabled);
+        await PersistAsync();
+    }
+
+    private async void VoiceGainSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (!_initialized) return;
+        VoiceGainPercentText.Text = $"{VoiceGainSlider.Value:0}%";
+        _settings.MicrophoneGain = VoiceGainSlider.Value / 100;
+        _audio.SetMicrophoneGain(_settings.MicrophoneGain);
+        await PersistAsync();
+    }
+
+    private async void NoiseStrengthSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (!_initialized) return;
+        NoiseStrengthPercentText.Text = $"{NoiseStrengthSlider.Value:0}%";
+        _settings.NoiseSuppressionStrength = NoiseStrengthSlider.Value / 100;
+        _audio.SetNoiseSuppressionStrength(_settings.NoiseSuppressionStrength);
+        await PersistAsync();
+    }
+
+    private async void VoiceClaritySwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        _settings.VoiceClarityEnabled = VoiceClaritySwitch.IsOn;
+        _audio.SetVoiceClarity(_settings.VoiceClarityEnabled);
+        await PersistAsync();
+    }
+
+    private async void OverlapSoundsSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        _settings.OverlapSounds = OverlapSoundsSwitch.IsOn;
+        _audio.SetOverlapSounds(_settings.OverlapSounds);
+        await PersistAsync();
+    }
+
+    private void StartWithWindowsSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized || _updatingStartupSwitch) return;
+        try
+        {
+            _windowsStartup.SetEnabled(StartWithWindowsSwitch.IsOn);
+            SetStatus(StartWithWindowsSwitch.IsOn
+                ? "O getSoundBoard iniciará na área de notificação com o Windows."
+                : "Inicialização com o Windows desligada.");
+        }
+        catch (Exception ex)
+        {
+            _updatingStartupSwitch = true;
+            try
+            {
+                try { StartWithWindowsSwitch.IsOn = _windowsStartup.IsEnabled; }
+                catch { StartWithWindowsSwitch.IsOn = !StartWithWindowsSwitch.IsOn; }
+            }
+            finally { _updatingStartupSwitch = false; }
+            SetStatus($"Não foi possível alterar a inicialização com o Windows: {ex.Message}", true);
+        }
     }
 
     private void MicVolumeDown_Click(object sender, RoutedEventArgs e)
@@ -435,10 +606,23 @@ public sealed partial class MainWindow : Window
             _audio.Disconnect();
             SetStatus("Um dispositivo de áudio foi desconectado. Atualize a lista, confira as escolhas e clique em Aplicar.", true);
         }
-        else if (_audio.ClipHasFinished)
+        else if (_audio.RemoveFinishedClips())
         {
-            _audio.StopClip();
             SetStatus("Pronto para o próximo som.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!_audio.IsConfigured && _settings.Onboarded && now < _startupAudioRetryUntil &&
+            now >= _nextStartupAudioAttempt)
+        {
+            _nextStartupAudioAttempt = now.AddSeconds(5);
+            try
+            {
+                _audio.Configure(_settings);
+                _startupAudioRetryUntil = DateTimeOffset.MinValue;
+                SetStatus("Áudio conectado após a inicialização do Windows.");
+            }
+            catch (Exception) { /* The saved devices may still be starting. Retry briefly. */ }
         }
     }
 
@@ -469,6 +653,17 @@ public sealed partial class MainWindow : Window
         if (_hiddenInTray) return;
         _hiddenInTray = true;
         AppWindow.Hide();
+    }
+
+    internal void StartInTray()
+    {
+        if (_tray is null || !_settings.Onboarded) return;
+        if (!_audio.IsConfigured)
+        {
+            _startupAudioRetryUntil = DateTimeOffset.UtcNow.AddMinutes(2);
+            _nextStartupAudioAttempt = DateTimeOffset.UtcNow;
+        }
+        HideToTray();
     }
 
     private void ShowFromTray()
