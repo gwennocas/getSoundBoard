@@ -105,6 +105,7 @@
                     <ComboBox x:Name="SpeakerBox" DisplayMemberPath="Name" SelectedValuePath="Id" PlaceholderText="Escolha onde ouvir" HorizontalAlignment="Stretch" />
                     <TextBlock Text="VB-CABLE Input" Foreground="#D8DEEA" Margin="0,7,0,0" />
                     <ComboBox x:Name="CableBox" DisplayMemberPath="Name" SelectedValuePath="Id" PlaceholderText="Escolha o cabo virtual" HorizontalAlignment="Stretch" />
+                    <TextBlock Text="Se instalado, o VB-CABLE é selecionado automaticamente." Foreground="#929BAE" TextWrapping="Wrap" />
                     <HyperlinkButton Content="Baixar VB-CABLE no site oficial ↗" Click="CableLink_Click" Padding="0,4" HorizontalAlignment="Left" />
                     <TextBlock Text="No Discord/jogo, selecione CABLE Output como microfone." Foreground="#A9B0C0" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,7">
@@ -119,11 +120,21 @@
                     </Grid>
                     <Slider x:Name="SpeakerVolumeSlider" Minimum="0" Maximum="100" Value="35" ValueChanged="VolumeSlider_ValueChanged" />
                     <Grid Margin="0,5,0,0">
-                        <TextBlock Text="No microfone virtual" Foreground="#D8DEEA" />
+                        <TextBlock Text="Sons junto à sua voz" Foreground="#D8DEEA" />
                         <TextBlock x:Name="MicPercentText" Text="70%" Foreground="#ADB5CA" HorizontalAlignment="Right" />
                     </Grid>
-                    <Slider x:Name="MicVolumeSlider" Minimum="0" Maximum="100" Value="70" ValueChanged="VolumeSlider_ValueChanged" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button Content="−" Width="38" Padding="0" Click="MicVolumeDown_Click" AutomationProperties.Name="Diminuir volume dos sons junto à voz" />
+                        <Slider x:Name="MicVolumeSlider" Grid.Column="1" Minimum="0" Maximum="100" Value="70" ValueChanged="VolumeSlider_ValueChanged" VerticalAlignment="Center" AutomationProperties.Name="Volume dos sons junto à voz" />
+                        <Button Grid.Column="2" Content="+" Width="38" Padding="0" Click="MicVolumeUp_Click" AutomationProperties.Name="Aumentar volume dos sons junto à voz" />
+                    </Grid>
                     <TextBlock Text="Sua voz mantém o volume definido no Windows. Ela não é reproduzida no seu fone pelo app." Foreground="#929BAE" TextWrapping="Wrap" Margin="0,9,0,0" />
+                    <TextBlock Text="Ao minimizar ou fechar, o app continua na área de notificação. Clique duas vezes no ícone para reabrir." Foreground="#929BAE" TextWrapping="Wrap" Margin="0,9,0,0" />
                 </StackPanel>
             </ScrollViewer>
         </Border>

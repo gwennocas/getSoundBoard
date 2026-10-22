@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using GetSoundBoard.Models;
 using GetSoundBoard.Services;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using NAudio.CoreAudioApi;
@@ -18,10 +19,13 @@ public sealed partial class MainWindow : Window
     private readonly List<SoundClip> _clips = [];
     private readonly ObservableCollection<SoundClip> _visibleClips = [];
     private readonly HotkeyManager _hotkeys;
+    private TrayService? _tray;
     private readonly DispatcherTimer _healthTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly nint _hwnd;
     private AppSettings _settings = new();
     private bool _initialized;
+    private bool _hiddenInTray;
+    private bool _exitRequested;
 
     public MainWindow()
     {
@@ -67,6 +71,19 @@ public sealed partial class MainWindow : Window
             }
         }
         RegisterHotkeys();
+        try
+        {
+            _tray = new TrayService(
+                () => DispatcherQueue.TryEnqueue(ShowFromTray),
+                () => DispatcherQueue.TryEnqueue(StopPlayback),
+                () => DispatcherQueue.TryEnqueue(ExitApplication));
+            AppWindow.Closing += AppWindow_Closing;
+            AppWindow.Changed += AppWindow_Changed;
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Ícone da área de notificação indisponível: {ex.Message}", true);
+        }
         _initialized = true;
         _healthTimer.Start();
     }
@@ -331,6 +348,12 @@ public sealed partial class MainWindow : Window
         await PersistAsync();
     }
 
+    private void MicVolumeDown_Click(object sender, RoutedEventArgs e)
+        => MicVolumeSlider.Value = Math.Max(0, MicVolumeSlider.Value - 5);
+
+    private void MicVolumeUp_Click(object sender, RoutedEventArgs e)
+        => MicVolumeSlider.Value = Math.Min(100, MicVolumeSlider.Value + 5);
+
     private void CableLink_Click(object sender, RoutedEventArgs e)
     {
         try { Process.Start(new ProcessStartInfo("https://vb-audio.com/Cable/index.htm") { UseShellExecute = true }); }
@@ -354,7 +377,44 @@ public sealed partial class MainWindow : Window
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         _healthTimer.Stop();
+        _tray?.Dispose();
         _hotkeys.Dispose();
         _audio.Dispose();
+    }
+
+    private void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_exitRequested || _tray is null) return;
+        args.Cancel = true;
+        HideToTray();
+    }
+
+    private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (_tray is null || _hiddenInTray || !args.DidPresenterChange) return;
+        if (sender.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized })
+            HideToTray();
+    }
+
+    private void HideToTray()
+    {
+        if (_hiddenInTray) return;
+        _hiddenInTray = true;
+        AppWindow.Hide();
+    }
+
+    private void ShowFromTray()
+    {
+        _hiddenInTray = false;
+        if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
+            presenter.Restore();
+        AppWindow.Show();
+        Activate();
+    }
+
+    private void ExitApplication()
+    {
+        _exitRequested = true;
+        Close();
     }
 }

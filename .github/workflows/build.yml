@@ -26,7 +26,7 @@ jobs:
       - name: Create installer
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF.Substring(11) } else { '0.1.0' }
+          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF.Substring(11) } else { '0.1.1' }
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DPublishDir=$((Resolve-Path artifacts/publish).Path)" "/DAppVersion=$version" installer/getSoundBoard.iss
       - uses: actions/upload-artifact@v4
         with:
