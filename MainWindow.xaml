@@ -47,7 +47,7 @@
             </Grid.RowDefinitions>
             <StackPanel Grid.Row="0" Spacing="6">
                 <TextBlock Text="Sua biblioteca" FontSize="28" FontWeight="Bold" Foreground="White" />
-                <TextBlock Text="Clique ou use um atalho enquanto joga. Solte arquivos MP3 ou WAV aqui para importar." TextWrapping="Wrap" Foreground="#A9B0C0" />
+                <TextBlock Text="Clique ou use um atalho enquanto joga. Solte arquivos de áudio aqui para importar (MP3, WAV, OGG/Opus, FLAC e outros)." TextWrapping="Wrap" Foreground="#A9B0C0" />
             </StackPanel>
             <Grid Grid.Row="1" Margin="0,23,0,18" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
@@ -88,7 +88,7 @@
                 <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
                     <TextBlock Text="♪" FontSize="58" Foreground="#7276FF" HorizontalAlignment="Center" />
                     <TextBlock Text="Sua biblioteca começa aqui" FontSize="20" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" />
-                    <TextBlock Text="Adicione um MP3 ou WAV para criar o primeiro botão." Foreground="#A9B0C0" HorizontalAlignment="Center" />
+                    <TextBlock Text="Adicione um áudio compatível para criar o primeiro botão." Foreground="#A9B0C0" HorizontalAlignment="Center" />
                 </StackPanel>
             </Grid>
         </Grid>

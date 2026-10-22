@@ -177,8 +177,8 @@ public sealed partial class MainWindow : Window
         try
         {
             var picker = new FileOpenPicker();
-            picker.FileTypeFilter.Add(".mp3");
-            picker.FileTypeFilter.Add(".wav");
+            foreach (var extension in AudioFileFormats.Extensions)
+                picker.FileTypeFilter.Add(extension);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
             var files = await picker.PickMultipleFilesAsync();
             if (files.Count > 0) await ImportFilesAsync(files.Select(f => f.Path));

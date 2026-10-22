@@ -1,6 +1,6 @@
 # getSoundBoard
 
-Soundboard open source para Windows 10/11. Toque MP3 e WAV por botões ou atalhos globais. O app envia sua voz e os sons para um microfone virtual e permite ouvir os sons em volume separado nos seus alto-falantes.
+Soundboard open source para Windows 10/11. Toque MP3, WAV, OGG/Vorbis, Ogg/Opus, FLAC, AIFF, M4A, AAC e WMA por botões ou atalhos globais. O app envia sua voz e os sons para um microfone virtual e permite ouvir os sons em volume separado nos seus alto-falantes.
 
 ## Como usar
 
@@ -10,7 +10,9 @@ Soundboard open source para Windows 10/11. Toque MP3 e WAV por botões ou atalho
 4. Reinicie o Windows para o novo dispositivo de áudio aparecer.
 5. Abra o getSoundBoard, clique em **Atualizar dispositivos** e escolha seu microfone físico e alto-falantes/fone. Se encontrado, o app seleciona **CABLE Input** automaticamente. Clique em **Aplicar**.
 6. No Discord ou jogo, escolha **CABLE Output** como dispositivo de entrada. O app mistura sua voz física com os sons nesse dispositivo.
-7. Adicione MP3 ou WAV pelo botão ou arrastando arquivos para a janela. Clique em **Tocar** ou configure um atalho em **Editar**.
+7. Adicione arquivos pelo botão ou arrastando-os para a janela. São aceitos MP3, WAV, OGG/Vorbis, Ogg/Opus, FLAC, AIFF, M4A, AAC e WMA. Clique em **Tocar** ou configure um atalho em **Editar**.
+
+OGG/Vorbis e Ogg/Opus são decodificados pelo app. FLAC, AAC, M4A e WMA usam os codecs de áudio do Windows; a disponibilidade pode variar conforme a edição e os codecs instalados.
 
 O volume dos sons nos alto-falantes e o volume dos sons enviados junto à sua voz têm controles separados. Use o slider ou os botões **−/+** para ajustar os sons no microfone virtual em passos de 5%; sua voz mantém o nível definido no Windows. Ao iniciar um novo som, o anterior para. **Parar tudo** interrompe o som, mantendo sua voz no chat.
 

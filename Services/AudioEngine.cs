@@ -38,8 +38,8 @@ public sealed class AudioEngine : IDisposable
     private WasapiOut? _cableOutput;
     private MixingSampleProvider? _speakerMix;
     private MixingSampleProvider? _cableMix;
-    private AudioFileReader? _speakerReader;
-    private AudioFileReader? _cableReader;
+    private WaveStream? _speakerReader;
+    private WaveStream? _cableReader;
     private ISampleProvider? _speakerClipInput;
     private ISampleProvider? _cableClipInput;
     private VolumeSampleProvider? _speakerClipVolume;
@@ -56,7 +56,10 @@ public sealed class AudioEngine : IDisposable
 
     public static void CheckFile(string path)
     {
-        using var reader = new AudioFileReader(path);
+        if (!AudioFileFormats.IsSupported(path))
+            throw new InvalidDataException($"Formato não suportado. Use {AudioFileFormats.SupportedFormatsDescription}.");
+
+        using var reader = AudioFileFormats.OpenReader(path);
         if (reader.WaveFormat.Channels is < 1 or > 2)
             throw new InvalidDataException("O áudio precisa ser mono ou estéreo.");
         if (reader.Length == 0)
@@ -138,11 +141,11 @@ public sealed class AudioEngine : IDisposable
             StopClipCore();
             try
             {
-                _speakerReader = new AudioFileReader(path);
-                _cableReader = new AudioFileReader(path);
-                _speakerClipVolume = new VolumeSampleProvider(ConvertToMixFormat(_speakerReader))
+                _speakerReader = AudioFileFormats.OpenReader(path);
+                _cableReader = AudioFileFormats.OpenReader(path);
+                _speakerClipVolume = new VolumeSampleProvider(ConvertToMixFormat((ISampleProvider)_speakerReader))
                     { Volume = (float)Math.Clamp(speakerVolume, 0, 1) };
-                _cableClipVolume = new VolumeSampleProvider(ConvertToMixFormat(_cableReader))
+                _cableClipVolume = new VolumeSampleProvider(ConvertToMixFormat((ISampleProvider)_cableReader))
                     { Volume = (float)Math.Clamp(microphoneVolume, 0, 1) };
                 _speakerClipInput = _speakerClipVolume;
                 _cableClipInput = _cableClipVolume;

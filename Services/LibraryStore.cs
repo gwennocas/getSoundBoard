@@ -50,10 +50,10 @@ public sealed class LibraryStore
 
     public async Task<SoundClip> ImportAsync(string source)
     {
-        var extension = Path.GetExtension(source).ToLowerInvariant();
-        if (extension is not (".mp3" or ".wav"))
-            throw new InvalidDataException("Use arquivos MP3 ou WAV.");
+        if (!AudioFileFormats.IsSupported(source))
+            throw new InvalidDataException($"Formato não suportado. Use {AudioFileFormats.SupportedFormatsDescription}.");
 
+        var extension = Path.GetExtension(source).ToLowerInvariant();
         var clip = new SoundClip { Title = Path.GetFileNameWithoutExtension(source).Trim() };
         if (clip.Title.Length == 0) clip.Title = "Sem nome";
         clip.FileName = clip.Id + extension;
