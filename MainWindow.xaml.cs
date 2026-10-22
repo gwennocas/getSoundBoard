@@ -367,7 +367,7 @@ public sealed partial class MainWindow : Window
 
     private async void MainTabView_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (MainTabView.SelectedItem == UpdatesTab && !_updatesLoaded)
+        if (ReferenceEquals(MainTabView.SelectedItem, UpdatesTab) && !_updatesLoaded)
             await LoadUpdatesAsync();
     }
 

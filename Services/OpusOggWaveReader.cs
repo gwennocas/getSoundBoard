@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Concentus;
 using Concentus.Oggfile;
 using Concentus.Structs;
 using NAudio.Wave;
