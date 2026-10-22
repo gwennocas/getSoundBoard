@@ -125,7 +125,7 @@ public sealed partial class MainWindow : Window
             CableBox.SelectedValue = cableOptions.Any(d => d.Id == _settings.CableInputId)
                 ? _settings.CableInputId : cableOptions.FirstOrDefault()?.Id;
             if (cableOptions.Count == 0)
-                SetStatus("VB-CABLE não encontrado. Instale pelo link, reinicie o Windows e atualize a lista.", true);
+                SetStatus("VB-CABLE não encontrado. Baixe e extraia o ZIP oficial, execute o instalador x64 como administrador, reinicie o Windows e clique em Atualizar dispositivos.", true);
         }
         catch (Exception ex)
         {
@@ -314,7 +314,7 @@ public sealed partial class MainWindow : Window
         var cableId = CableBox.SelectedValue as string;
         if (micId is null || speakerId is null || cableId is null)
         {
-            SetStatus("Escolha os três dispositivos. Se o cabo não aparece, instale o VB-CABLE e atualize.", true);
+            SetStatus("Escolha os três dispositivos. Para instalar o VB-CABLE: baixe e extraia o ZIP oficial, execute o instalador x64 como administrador, reinicie o Windows e atualize a lista.", true);
             return;
         }
         var next = new AppSettings
@@ -356,7 +356,7 @@ public sealed partial class MainWindow : Window
 
     private void CableLink_Click(object sender, RoutedEventArgs e)
     {
-        try { Process.Start(new ProcessStartInfo("https://vb-audio.com/Cable/index.htm") { UseShellExecute = true }); }
+        try { Process.Start(new ProcessStartInfo("https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip") { UseShellExecute = true }); }
         catch (Exception ex) { SetStatus($"Não foi possível abrir o site: {ex.Message}", true); }
     }
 

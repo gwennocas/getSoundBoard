@@ -4,10 +4,13 @@ Soundboard open source para Windows 10/11. Toque MP3 e WAV por botões ou atalho
 
 ## Como usar
 
-1. Instale o [VB-CABLE pelo site oficial](https://vb-audio.com/Cable/index.htm) e reinicie o Windows conforme as instruções dele. O driver não acompanha o instalador deste projeto.
-2. Abra o getSoundBoard. Escolha seu microfone físico, seus alto-falantes/fone e clique em **Aplicar**. Se estiver instalado, o app pré-seleciona **CABLE Input** e guarda essa escolha.
-3. No Discord ou jogo, escolha **CABLE Output** como dispositivo de entrada. O app mistura sua voz física com os sons nesse dispositivo.
-4. Adicione MP3 ou WAV pelo botão ou arrastando arquivos para a janela. Clique em **Tocar** ou configure um atalho em **Editar**.
+1. No app, clique em **Baixar ZIP oficial do VB-Audio**. O download também está disponível na [página oficial do VB-CABLE](https://vb-audio.com/Cable/index.htm). O driver não acompanha o instalador do getSoundBoard.
+2. Abra o ZIP baixado e extraia todos os arquivos para uma pasta.
+3. Na pasta extraída, clique com o botão direito no instalador de 64 bits (x64), escolha **Executar como administrador** e permita a instalação do driver. O instalador oficial pode pedir confirmação do Windows.
+4. Reinicie o Windows para o novo dispositivo de áudio aparecer.
+5. Abra o getSoundBoard, clique em **Atualizar dispositivos** e escolha seu microfone físico e alto-falantes/fone. Se encontrado, o app seleciona **CABLE Input** automaticamente. Clique em **Aplicar**.
+6. No Discord ou jogo, escolha **CABLE Output** como dispositivo de entrada. O app mistura sua voz física com os sons nesse dispositivo.
+7. Adicione MP3 ou WAV pelo botão ou arrastando arquivos para a janela. Clique em **Tocar** ou configure um atalho em **Editar**.
 
 O volume dos sons nos alto-falantes e o volume dos sons enviados junto à sua voz têm controles separados. Use o slider ou os botões **−/+** para ajustar os sons no microfone virtual em passos de 5%; sua voz mantém o nível definido no Windows. Ao iniciar um novo som, o anterior para. **Parar tudo** interrompe o som, mantendo sua voz no chat.
 
@@ -31,4 +34,4 @@ O workflow em `.github/workflows/build.yml` compila a versão Windows e gera o i
 
 ## Dados e licença
 
-Os arquivos importados e as configurações ficam em `%LOCALAPPDATA%\getSoundBoard`. O app não usa conta nem serviço online. Código sob licença [MIT](LICENSE). VB-CABLE e NAudio mantêm suas próprias licenças.
+Os arquivos importados e as configurações ficam em `%LOCALAPPDATA%\getSoundBoard`. O app não usa conta nem serviço online. Código sob licença [MIT](LICENSE). VB-CABLE é um produto da [VB-Audio](https://vb-cable.com/), distribuído sob modelo donationware; o pacote do driver não é redistribuído pelo getSoundBoard. Se o produto for útil, conheça as opções de apoio no site oficial. VB-CABLE e NAudio mantêm suas próprias licenças.
