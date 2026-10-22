@@ -13,12 +13,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="340" />
-        </Grid.ColumnDefinitions>
-
-        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#191E29" Padding="28,22" BorderBrush="#2A3040" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Background="#191E29" Padding="28,22" BorderBrush="#2A3040" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -37,7 +32,14 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Grid.Column="0" Padding="28,26,20,20">
+        <TabView x:Name="MainTabView" Grid.Row="1" IsAddTabButtonVisible="False" SelectionChanged="MainTabView_SelectionChanged">
+          <TabViewItem x:Name="SoundboardTab" Header="Soundboard" IsClosable="False">
+          <Grid Background="#11141C">
+          <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="340" />
+          </Grid.ColumnDefinitions>
+        <Grid Grid.Column="0" Padding="28,26,20,20">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -91,7 +93,7 @@
             </Grid>
         </Grid>
 
-        <Border Grid.Row="1" Grid.Column="1" Background="#191E29" BorderBrush="#2A3040" BorderThickness="1,0,0,0">
+        <Border Grid.Column="1" Background="#191E29" BorderBrush="#2A3040" BorderThickness="1,0,0,0">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Padding="24,28" Spacing="12">
                     <TextBlock Text="Configuração de áudio" FontSize="21" FontWeight="Bold" Foreground="White" />
@@ -143,8 +145,64 @@
                 </StackPanel>
             </ScrollViewer>
         </Border>
+          </Grid>
+          </TabViewItem>
+          <TabViewItem x:Name="UpdatesTab" Header="Atualizações" IsClosable="False">
+            <Grid Background="#11141C" Padding="28,26">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+              </Grid.RowDefinitions>
+              <StackPanel Spacing="6">
+                <TextBlock Text="Atualizações" FontSize="28" FontWeight="Bold" Foreground="White" />
+                <TextBlock Text="Confira o que mudou e escolha qual versão do getSoundBoard baixar." TextWrapping="Wrap" Foreground="#A9B0C0" />
+              </StackPanel>
+              <Grid Grid.Row="1" Margin="0,20,0,10">
+                <TextBlock x:Name="CurrentVersionText" Foreground="#D8DEEA" VerticalAlignment="Center" />
+                <Button x:Name="CheckUpdatesButton" Content="↻  Verificar atualizações" Click="CheckUpdates_Click" Background="#7276FF" Foreground="White" Padding="16,9" HorizontalAlignment="Right" />
+              </Grid>
+              <TextBlock x:Name="UpdateStatusText" Grid.Row="2" Text="Clique em Verificar atualizações para consultar as versões publicadas." Foreground="#A9B0C0" TextWrapping="Wrap" Margin="0,0,0,10" />
+              <Grid Grid.Row="3">
+                <ListView x:Name="ReleaseList" SelectionMode="None" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                  <ListView.ItemTemplate>
+                    <DataTemplate>
+                      <Border Margin="0,0,0,12" Padding="18" CornerRadius="14" Background="#222838" BorderBrush="#333B50" BorderThickness="1">
+                        <Grid ColumnSpacing="18">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <StackPanel Spacing="8">
+                            <Grid ColumnSpacing="10">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Text="{Binding Version}" FontSize="20" FontWeight="Bold" Foreground="White" />
+                              <TextBlock Grid.Column="1" Text="{Binding StatusLabel}" Foreground="#BFC3FF" VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Text="{Binding PublishedAt}" FontSize="12" Foreground="#ADB5CA" />
+                            <TextBlock Text="{Binding Notes}" Foreground="#D8DEEA" TextWrapping="Wrap" />
+                          </StackPanel>
+                          <Button Grid.Column="1" Content="{Binding DownloadButtonText}" Tag="{Binding DownloadUrl}" Click="DownloadRelease_Click" Background="#4146A5" Foreground="White" Padding="16,10" VerticalAlignment="Center" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ListView.ItemTemplate>
+                </ListView>
+                <StackPanel x:Name="NoReleasesState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" Visibility="Collapsed">
+                  <TextBlock Text="Nenhuma versão encontrada" FontSize="19" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" />
+                  <TextBlock Text="Tente verificar novamente mais tarde." Foreground="#A9B0C0" HorizontalAlignment="Center" />
+                </StackPanel>
+                <ProgressRing x:Name="UpdatesLoadingRing" IsActive="False" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Grid>
+            </Grid>
+          </TabViewItem>
+        </TabView>
 
-        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#191E29" BorderBrush="#2A3040" BorderThickness="0,1,0,0" Padding="24,10">
+        <Border Grid.Row="2" Background="#191E29" BorderBrush="#2A3040" BorderThickness="0,1,0,0" Padding="24,10">
             <TextBlock x:Name="StatusText" Text="Pronto para configurar o áudio." Foreground="#A9B0C0" TextTrimming="CharacterEllipsis" />
         </Border>
     </Grid>

@@ -18,6 +18,8 @@ O atalho global para parar é **Ctrl+Alt+Backspace**. Cada som pode receber um a
 
 Ao minimizar ou fechar a janela, o getSoundBoard continua ativo na área de notificação do Windows para manter a voz e os atalhos funcionando. Clique duas vezes no ícone para reabrir. O menu do ícone permite **Abrir**, **Parar tudo** ou **Sair**.
 
+Na aba **Atualizações**, clique em **Verificar atualizações** para ver as versões estáveis publicadas, as notas de cada versão e escolher o instalador para baixar. Os downloads abrem pelo GitHub Releases; a instalação é iniciada por você.
+
 Se um dispositivo for desconectado, escolha os dispositivos novamente e clique em **Aplicar**. Se um atalho já estiver em uso por outro programa, o app informa o conflito. Alguns jogos com captura exclusiva de teclado podem impedir atalhos globais; os botões da janela continuam disponíveis.
 
 ## Compilar

@@ -19,6 +19,8 @@ public sealed partial class MainWindow : Window
     private readonly List<SoundClip> _clips = [];
     private readonly ObservableCollection<SoundClip> _visibleClips = [];
     private readonly HotkeyManager _hotkeys;
+    private readonly UpdateService _updateService = new();
+    private readonly ObservableCollection<AppRelease> _releases = [];
     private TrayService? _tray;
     private readonly DispatcherTimer _healthTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly nint _hwnd;
@@ -26,6 +28,7 @@ public sealed partial class MainWindow : Window
     private bool _initialized;
     private bool _hiddenInTray;
     private bool _exitRequested;
+    private bool _updatesLoaded;
 
     public MainWindow()
     {
@@ -36,6 +39,8 @@ public sealed partial class MainWindow : Window
         _hotkeys.Pressed += PlayById;
         _hotkeys.StopRequested += StopPlayback;
         SoundGrid.ItemsSource = _visibleClips;
+        ReleaseList.ItemsSource = _releases;
+        CurrentVersionText.Text = _updateService.CurrentVersionText;
         Closed += MainWindow_Closed;
         _healthTimer.Tick += HealthTimer_Tick;
 
@@ -358,6 +363,69 @@ public sealed partial class MainWindow : Window
     {
         try { Process.Start(new ProcessStartInfo("https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip") { UseShellExecute = true }); }
         catch (Exception ex) { SetStatus($"Não foi possível abrir o site: {ex.Message}", true); }
+    }
+
+    private async void MainTabView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (MainTabView.SelectedItem == UpdatesTab && !_updatesLoaded)
+            await LoadUpdatesAsync();
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+        => await LoadUpdatesAsync();
+
+    private async Task LoadUpdatesAsync()
+    {
+        CheckUpdatesButton.IsEnabled = false;
+        UpdatesLoadingRing.IsActive = true;
+        NoReleasesState.Visibility = Visibility.Collapsed;
+        UpdateStatusText.Text = "Consultando versões publicadas no GitHub…";
+        UpdateStatusText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+            Windows.UI.Color.FromArgb(255, 169, 176, 192));
+
+        try
+        {
+            var releases = await _updateService.GetReleasesAsync();
+            _releases.Clear();
+            foreach (var release in releases)
+                _releases.Add(release);
+
+            _updatesLoaded = true;
+            var newerCount = releases.Count(release => release.StatusLabel == "Atualização disponível");
+            UpdateStatusText.Text = newerCount > 0
+                ? $"Encontramos {newerCount} versão(ões) mais recente(s). Escolha uma para baixar o instalador."
+                : releases.Count == 0
+                    ? "Nenhuma versão estável publicada foi encontrada."
+                    : "Você está com a versão mais recente disponível.";
+            NoReleasesState.Visibility = releases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (Exception ex)
+        {
+            _updatesLoaded = false;
+            UpdateStatusText.Text = $"Não foi possível consultar as versões. Verifique sua conexão e tente de novo. ({ex.Message})";
+            UpdateStatusText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                Windows.UI.Color.FromArgb(255, 255, 155, 165));
+        }
+        finally
+        {
+            UpdatesLoadingRing.IsActive = false;
+            CheckUpdatesButton.IsEnabled = true;
+        }
+    }
+
+    private void DownloadRelease_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string url }
+            || !Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || uri.Host != "github.com")
+        {
+            SetStatus("O link de download desta versão não é válido.", true);
+            return;
+        }
+
+        try { Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); }
+        catch (Exception ex) { SetStatus($"Não foi possível abrir o download: {ex.Message}", true); }
     }
 
     private void HealthTimer_Tick(object? sender, object e)

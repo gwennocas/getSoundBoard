@@ -5,6 +5,7 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>GetSoundBoard</RootNamespace>
     <AssemblyName>getSoundBoard</AssemblyName>
+    <Version>0.1.3</Version>
     <Product>getSoundBoard</Product>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
