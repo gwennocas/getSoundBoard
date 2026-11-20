@@ -7,6 +7,8 @@ Soundboard open source para Windows 10/11, migrado para Rust. Toque WAV, MP3, OG
 - Sons simultâneos, repetição, pausa, reprodução aleatória e controles de volume separados.
 - Categorias, busca, importação de pastas, gravação de microfone e editor de trecho com forma de onda.
 - Atalhos globais individuais, por posição e para controlar a reprodução.
+- Saída independente para fone e microfone virtual, com opção para enviar também sua voz.
+- Importação de áudio por URL com yt-dlp e FFmpeg instalados separadamente.
 - Ganho, RNNoise ajustável e EQ de clareza opcionais para a voz, além de normalização de pico por som.
 - Área de notificação e inicialização com o Windows; biblioteca C# existente importada na primeira abertura.
 
@@ -14,7 +16,7 @@ Soundboard open source para Windows 10/11, migrado para Rust. Toque WAV, MP3, OG
 
 1. Abra o getSoundBoard e clique em **Conectar áudio** para usar os dispositivos selecionados. Para tocar apenas nos alto-falantes, escolha o modo **Só fone**; essa rota não precisa de cabo virtual.
 2. Para enviar a voz e os sons ao Discord ou jogo, instale o [VB-CABLE oficial](https://vb-audio.com/Cable/index.htm). O driver não acompanha o instalador do getSoundBoard. Escolha seu microfone físico, alto-falantes/fone e **CABLE Input** no app; no Discord ou jogo, escolha **CABLE Output** como entrada.
-3. Adicione arquivos pelo botão ou arrastando-os para a janela. Clique em **Tocar** ou configure um atalho em **Editar**.
+3. Adicione arquivos pelo botão ou arrastando-os para a janela. Para baixar áudio de uma URL, instale [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest) e [FFmpeg](https://github.com/yt-dlp/FFmpeg-Builds/releases/latest); o app os detecta ao lado do executável ou no `PATH`. Clique em **Tocar** ou configure um atalho em **Editar**.
 
 São aceitos WAV, MP3, OGG/Vorbis, FLAC, AIFF, AAC, M4A e arquivos MP4 com faixa de áudio compatível.
 

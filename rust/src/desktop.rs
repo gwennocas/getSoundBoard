@@ -15,7 +15,11 @@ use std::{
     fs::{self, File},
     io::{BufReader, Write},
     path::{Path, PathBuf},
-    sync::{mpsc, Arc, Mutex},
+    process::Command,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -76,6 +80,8 @@ struct Settings {
     microphone: String,
     speakers: String,
     chat_output: String,
+    #[serde(default)]
+    sound_to_microphone: bool,
     send_voice_to_chat: bool,
     start_with_windows: bool,
     microphone_gain: f32,
@@ -96,6 +102,7 @@ impl Default for Settings {
             microphone: String::new(),
             speakers: String::new(),
             chat_output: String::new(),
+            sound_to_microphone: false,
             send_voice_to_chat: false,
             start_with_windows: false,
             microphone_gain: 1.0,
@@ -115,10 +122,10 @@ struct ActiveClip {
 }
 
 struct AudioRoute {
-    _speaker_stream: OutputStream,
+    _speaker_stream: Option<OutputStream>,
     _chat_stream: Option<OutputStream>,
     _microphone_stream: Option<cpal::Stream>,
-    speakers: Bus,
+    speakers: Option<Bus>,
     chat: Option<Bus>,
     voice_controls: Option<Arc<VoiceControls>>,
 }
@@ -197,6 +204,21 @@ fn default_clip_gain() -> f32 {
 
 fn default_normalization_gain() -> f32 {
     1.0
+}
+
+fn find_tool(name: &str) -> Option<PathBuf> {
+    let executable = if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_owned()
+    };
+    let beside_app = std::env::current_exe().ok()?.parent()?.join(&executable);
+    if beside_app.is_file() {
+        return Some(beside_app);
+    }
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|directory| directory.join(&executable))
+        .find(|path| path.is_file())
 }
 
 fn peak_normalization_gain(path: &Path) -> Result<f32> {
@@ -330,6 +352,10 @@ struct Board {
     edit: Option<(usize, Clip)>,
     recording: Option<Recorder>,
     search: String,
+    download_url: String,
+    download_busy: bool,
+    download_tx: mpsc::Sender<std::result::Result<PathBuf, String>>,
+    download_rx: mpsc::Receiver<std::result::Result<PathBuf, String>>,
     category: String,
     paused: bool,
     selected: Option<PathBuf>,
@@ -342,7 +368,11 @@ struct Board {
     #[cfg(windows)]
     _tray: TrayIcon,
     #[cfg(windows)]
-    exit_requested: bool,
+    exit_requested: Arc<AtomicBool>,
+    #[cfg(windows)]
+    tray_event_rx: mpsc::Receiver<TrayIconEvent>,
+    #[cfg(windows)]
+    tray_menu_rx: mpsc::Receiver<MenuEvent>,
 }
 
 impl Board {
@@ -541,8 +571,8 @@ impl Board {
             .as_ref()
             .ok_or("Conecte os dispositivos de áudio primeiro")?;
         let (monitor, chat) = match mode {
-            PlayMode::Both => (Some(&route.speakers), route.chat.as_ref()),
-            PlayMode::Speakers => (Some(&route.speakers), None),
+            PlayMode::Both => (route.speakers.as_ref(), route.chat.as_ref()),
+            PlayMode::Speakers => (route.speakers.as_ref(), None),
             PlayMode::Microphone => (None, route.chat.as_ref()),
         };
         if monitor.is_none() && chat.is_none() {
@@ -643,6 +673,64 @@ impl Board {
         Ok(())
     }
 
+    fn download_url(&mut self) -> Result<()> {
+        let yt_dlp = find_tool("yt-dlp").ok_or("Instale yt-dlp para importar por URL")?;
+        let ffmpeg = find_tool("ffmpeg").ok_or("Instale FFmpeg para extrair o áudio")?;
+        let url = self.download_url.trim().to_owned();
+        if url.is_empty() {
+            return Err("Cole uma URL de áudio ou vídeo".into());
+        }
+        let dir = self.root.join("url-imports").join(format!(
+            "{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis()
+        ));
+        fs::create_dir_all(&dir)?;
+        let sender = self.download_tx.clone();
+        self.download_busy = true;
+        if let Err(error) = std::thread::Builder::new()
+            .name("getsoundboard-url-import".into())
+            .spawn(move || {
+                let output = Command::new(yt_dlp)
+                    .arg("--no-playlist")
+                    .arg("--no-progress")
+                    .arg("--extract-audio")
+                    .arg("--audio-format")
+                    .arg("mp3")
+                    .arg("--audio-quality")
+                    .arg("0")
+                    .arg("--ffmpeg-location")
+                    .arg(ffmpeg)
+                    .arg("--print")
+                    .arg("after_move:filepath")
+                    .arg("-o")
+                    .arg(dir.join("%(title).150B [%(id)s].%(ext)s"))
+                    .arg(url)
+                    .output();
+                let result = match output {
+                    Ok(output) if output.status.success() => {
+                        String::from_utf8_lossy(&output.stdout)
+                            .lines()
+                            .last()
+                            .map(PathBuf::from)
+                            .filter(|path| path.is_file())
+                            .ok_or_else(|| "yt-dlp terminou sem gerar um arquivo de áudio".into())
+                    }
+                    Ok(output) => Err(String::from_utf8_lossy(&output.stderr).trim().to_owned()),
+                    Err(error) => Err(format!("Não foi possível executar yt-dlp: {error}")),
+                };
+                if result.is_err() {
+                    let _ = fs::remove_dir_all(&dir);
+                }
+                let _ = sender.send(result);
+            })
+        {
+            self.download_busy = false;
+            return Err(error.into());
+        }
+        Ok(())
+    }
+
     fn import_folder(&mut self, folder: &Path) -> Result<()> {
         self.import(audio_files(folder)?)
     }
@@ -675,24 +763,23 @@ impl Board {
     }
 
     fn connect_audio(&mut self) -> Result<()> {
-        let speaker_device = self
-            .outputs
-            .iter()
-            .find(|(name, _)| name == &self.settings.speakers)
-            .map(|(_, device)| device)
-            .ok_or("Escolha uma saída para o fone")?;
-        let (speaker_stream, speaker_output) = OutputStream::try_from_device(speaker_device)?;
-        let (speakers, speaker_mix) = bus();
-        speaker_output.play_raw(speaker_mix)?;
+        let (speaker_stream, speakers) = if self.settings.play_mode != PlayMode::Microphone {
+            let speaker_device = self
+                .outputs
+                .iter()
+                .find(|(name, _)| name == &self.settings.speakers)
+                .map(|(_, device)| device)
+                .ok_or("Escolha uma saída para o fone")?;
+            let (stream, output) = OutputStream::try_from_device(speaker_device)?;
+            let (speakers, mix) = bus();
+            output.play_raw(mix)?;
+            (Some(stream), Some(speakers))
+        } else {
+            (None, None)
+        };
 
         let (chat_stream, chat, microphone_stream, voice_controls) =
-            if self.settings.send_voice_to_chat {
-                let mic = self
-                    .inputs
-                    .iter()
-                    .find(|(name, _)| name == &self.settings.microphone)
-                    .map(|(_, device)| device)
-                    .ok_or("Escolha seu microfone")?;
+            if self.settings.sound_to_microphone || self.settings.send_voice_to_chat {
                 if self.settings.chat_output.is_empty()
                     || self.settings.chat_output == self.settings.speakers
                 {
@@ -707,17 +794,28 @@ impl Board {
                 let (stream, output) = OutputStream::try_from_device(chat_device)?;
                 let (chat, mix) = bus();
                 output.play_raw(mix)?;
-                let (capture, controls) = start_voice(
-                    mic,
-                    &chat,
-                    VoiceSettings {
-                        microphone_gain: self.settings.microphone_gain,
-                        noise_suppression: self.settings.noise_suppression,
-                        suppression_strength: self.settings.suppression_strength,
-                        clarity: self.settings.voice_clarity,
-                    },
-                )?;
-                (Some(stream), Some(chat), Some(capture), Some(controls))
+                let (capture, controls) = if self.settings.send_voice_to_chat {
+                    let mic = self
+                        .inputs
+                        .iter()
+                        .find(|(name, _)| name == &self.settings.microphone)
+                        .map(|(_, device)| device)
+                        .ok_or("Escolha seu microfone")?;
+                    let (capture, controls) = start_voice(
+                        mic,
+                        &chat,
+                        VoiceSettings {
+                            microphone_gain: self.settings.microphone_gain,
+                            noise_suppression: self.settings.noise_suppression,
+                            suppression_strength: self.settings.suppression_strength,
+                            clarity: self.settings.voice_clarity,
+                        },
+                    )?;
+                    (Some(capture), Some(controls))
+                } else {
+                    (None, None)
+                };
+                (Some(stream), Some(chat), capture, controls)
             } else {
                 (None, None, None, None)
             };
@@ -739,8 +837,12 @@ impl Board {
             self.settings.play_mode = PlayMode::Speakers;
         }
         self.save_settings()?;
-        self.status = if self.settings.send_voice_to_chat {
+        self.status = if self.settings.sound_to_microphone && self.settings.send_voice_to_chat {
             "Áudio conectado: voz e sons seguem para o chat".into()
+        } else if self.settings.sound_to_microphone {
+            "Saída do microfone conectada para os sons".into()
+        } else if self.settings.send_voice_to_chat {
+            "Áudio conectado: voz segue para o chat".into()
         } else {
             "Áudio conectado: sons saem pelo fone".into()
         };
@@ -836,6 +938,28 @@ impl Drop for Board {
 impl eframe::App for Board {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(60));
+        while let Ok(result) = self.download_rx.try_recv() {
+            self.download_busy = false;
+            match result {
+                Ok(path) => {
+                    let dir = path.parent().map(Path::to_owned);
+                    match self.import(vec![path]) {
+                        Ok(()) => {
+                            if let Some(dir) = dir {
+                                let _ = fs::remove_dir_all(dir);
+                            }
+                            self.download_url.clear();
+                            self.status = "Áudio baixado e adicionado à biblioteca".into();
+                        }
+                        Err(error) => {
+                            self.status =
+                                format!("Download concluído, mas a importação falhou: {error}")
+                        }
+                    }
+                }
+                Err(error) => self.status = format!("Falha ao baixar áudio: {error}"),
+            }
+        }
         while let Ok((path, result)) = self.waveform_rx.try_recv() {
             if self.waveform_loading.as_ref() == Some(&path) {
                 self.waveform_loading = None;
@@ -847,7 +971,7 @@ impl eframe::App for Board {
         }
         #[cfg(windows)]
         {
-            while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+            while let Ok(event) = self.tray_event_rx.try_recv() {
                 if matches!(
                     event,
                     TrayIconEvent::Click {
@@ -862,7 +986,7 @@ impl eframe::App for Board {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
             }
-            while let Ok(event) = MenuEvent::receiver().try_recv() {
+            while let Ok(event) = self.tray_menu_rx.try_recv() {
                 match event.id().as_ref() {
                     "open" => {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
@@ -870,13 +994,16 @@ impl eframe::App for Board {
                     }
                     "stop" => self.stop_all(),
                     "exit" => {
-                        self.exit_requested = true;
+                        self.exit_requested.store(true, Ordering::Release);
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        ctx.request_repaint();
                     }
                     _ => {}
                 }
             }
-            if ctx.input(|input| input.viewport().close_requested()) && !self.exit_requested {
+            if self.exit_requested.load(Ordering::Acquire) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            } else if ctx.input(|input| input.viewport().close_requested()) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
             }
@@ -936,18 +1063,27 @@ impl eframe::App for Board {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("getSoundBoard");
+            ui.spacing_mut().item_spacing = egui::vec2(12.0, 10.0);
+            let controls_height = (ui.available_height() * 0.68).clamp(320.0, 500.0);
+            egui::ScrollArea::vertical()
+                .id_salt("board_controls")
+                .max_height(controls_height)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+            ui.set_width(ui.available_width());
             let mut connect_clicked = false;
             ui.group(|ui| {
                 ui.label("Áudio");
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     egui::ComboBox::from_id_salt("speaker_device")
-                        .selected_text(if self.settings.speakers.is_empty() { "Escolha o fone" } else { &self.settings.speakers })
+                        .selected_text(if self.settings.speakers.is_empty() { "Saída do fone" } else { &self.settings.speakers })
                         .show_ui(ui, |ui| {
                             for (name, _) in &self.outputs {
                                 ui.selectable_value(&mut self.settings.speakers, name.clone(), name);
                             }
                         });
-                    ui.checkbox(&mut self.settings.send_voice_to_chat, "Enviar voz ao chat");
+                    ui.checkbox(&mut self.settings.sound_to_microphone, "Tocar sons no microfone");
+                    ui.checkbox(&mut self.settings.send_voice_to_chat, "Enviar minha voz também");
                 });
                 #[cfg(windows)]
                 {
@@ -969,17 +1105,10 @@ impl eframe::App for Board {
                         }
                     }
                 }
-                if self.settings.send_voice_to_chat {
-                    ui.horizontal(|ui| {
-                        egui::ComboBox::from_id_salt("microphone_device")
-                            .selected_text(if self.settings.microphone.is_empty() { "Escolha o microfone" } else { &self.settings.microphone })
-                            .show_ui(ui, |ui| {
-                                for (name, _) in &self.inputs {
-                                    ui.selectable_value(&mut self.settings.microphone, name.clone(), name);
-                                }
-                            });
+                if self.settings.sound_to_microphone || self.settings.send_voice_to_chat {
+                    ui.horizontal_wrapped(|ui| {
                         egui::ComboBox::from_id_salt("chat_device")
-                            .selected_text(if self.settings.chat_output.is_empty() { "Escolha a saída virtual do chat" } else { &self.settings.chat_output })
+                            .selected_text(if self.settings.chat_output.is_empty() { "Escolha o microfone virtual" } else { &self.settings.chat_output })
                             .show_ui(ui, |ui| {
                                 for (name, _) in &self.outputs {
                                     if name != &self.settings.speakers {
@@ -987,7 +1116,19 @@ impl eframe::App for Board {
                                     }
                                 }
                             });
+                        if self.settings.send_voice_to_chat {
+                            egui::ComboBox::from_id_salt("microphone_device")
+                                .selected_text(if self.settings.microphone.is_empty() { "Escolha seu microfone" } else { &self.settings.microphone })
+                                .show_ui(ui, |ui| {
+                                    for (name, _) in &self.inputs {
+                                        ui.selectable_value(&mut self.settings.microphone, name.clone(), name);
+                                    }
+                                });
+                        }
                     });
+                    ui.weak("No chat, selecione o cabo virtual como microfone. Para ouvir só no fone, deixe “Tocar sons no microfone” desligado.");
+                }
+                if self.settings.send_voice_to_chat {
                     ui.label("Processamento da voz");
                     let mut voice_changed = ui
                         .add(
@@ -1029,7 +1170,7 @@ impl eframe::App for Board {
                     }
                 }
                 if self.route.is_none() {
-                    ui.weak("Escolha uma saída e conecte. Para voz no chat, selecione o microfone e uma entrada virtual (por exemplo, VB-CABLE).");
+                    ui.weak("Escolha os destinos e clique em Conectar áudio.");
                 }
             });
             if connect_clicked {
@@ -1037,7 +1178,9 @@ impl eframe::App for Board {
                     self.status = format!("Não foi possível conectar: {e}");
                 }
             }
-            ui.horizontal(|ui| {
+            ui.group(|ui| {
+                ui.label("Gravação");
+                ui.horizontal_wrapped(|ui| {
                 if self
                     .recording
                     .as_ref()
@@ -1066,8 +1209,11 @@ impl eframe::App for Board {
                         self.status = error.to_string();
                     }
                 }
+                });
             });
-            ui.horizontal(|ui| {
+            ui.group(|ui| {
+                ui.label("Sons e reprodução");
+                ui.horizontal_wrapped(|ui| {
                 if ui.button("Adicionar sons…").clicked() {
                     if let Some(paths) = egui_file_dialog() {
                         if let Err(e) = self.import(paths) {
@@ -1123,10 +1269,63 @@ impl eframe::App for Board {
                         self.bind();
                     }
                 }
+                });
+            });
+            ui.group(|ui| {
+                ui.label("Importar da internet");
+                ui.horizontal_wrapped(|ui| {
+                ui.label("URL");
+                ui.text_edit_singleline(&mut self.download_url);
+                if ui
+                    .add_enabled(
+                        !self.download_busy,
+                        egui::Button::new(if self.download_busy { "Baixando…" } else { "Baixar áudio" }),
+                    )
+                    .clicked()
+                {
+                    if let Err(error) = self.download_url() {
+                        self.status = error.to_string();
+                    }
+                }
+                });
+            });
+            ui.group(|ui| {
+                ui.label("Ferramentas externas");
+                ui.weak("Instale cada ferramenta separadamente e veja para que ela serve.");
+                egui::Grid::new("external_tools_table")
+                    .num_columns(4)
+                    .striped(true)
+                    .show(ui, |ui| {
+                        ui.strong("Ferramenta");
+                        ui.strong("Uso no app");
+                        ui.strong("Estado");
+                        ui.strong("Site oficial");
+                        ui.end_row();
+
+                        ui.label("yt-dlp");
+                        ui.label("Baixar áudio de uma URL");
+                        ui.label(if find_tool("yt-dlp").is_some() { "Disponível" } else { "Não instalado" });
+                        ui.hyperlink_to("Downloads", "https://github.com/yt-dlp/yt-dlp/releases/latest");
+                        ui.end_row();
+
+                        ui.label("FFmpeg");
+                        ui.label("Converter downloads para MP3");
+                        ui.label(if find_tool("ffmpeg").is_some() { "Disponível" } else { "Não instalado" });
+                        ui.hyperlink_to("Builds", "https://github.com/yt-dlp/FFmpeg-Builds/releases/latest");
+                        ui.end_row();
+
+                        ui.label("VB-CABLE");
+                        ui.label("Enviar sons ao microfone virtual");
+                        ui.label(if self.outputs.iter().any(|(name, _)| name.to_lowercase().contains("cable input")) { "Detectado" } else { "Não instalado" });
+                        ui.hyperlink_to("Site", "https://vb-audio.com/Cable/");
+                        ui.end_row();
+                    });
             });
 
             let mut mode_changed = false;
-            ui.horizontal(|ui| {
+            ui.group(|ui| {
+                ui.label("Saída e busca");
+                ui.horizontal_wrapped(|ui| {
                 egui::ComboBox::from_id_salt("play_mode")
                     .selected_text(match self.settings.play_mode {
                         PlayMode::Both => "Fone + microfone",
@@ -1160,10 +1359,15 @@ impl eframe::App for Board {
                             ui.selectable_value(&mut self.category, category.to_owned(), category);
                         }
                     });
-            });
+                });
             if mode_changed {
                 if let Err(e) = self.save_settings() {
                     self.status = e.to_string();
+                }
+                if self.route.is_some() {
+                    if let Err(error) = self.connect_audio() {
+                        self.status = format!("Não foi possível trocar a saída: {error}");
+                    }
                 }
             }
 
@@ -1182,14 +1386,16 @@ impl eframe::App for Board {
                     self.status = e.to_string();
                 }
             }
+            });
             if self.route.is_none() && self.settings.play_mode == PlayMode::Microphone {
                 ui.colored_label(egui::Color32::YELLOW, "Conecte uma saída de chat para tocar no microfone.");
             }
-            ui.weak("Arraste arquivos de áudio para importar. Ctrl+Alt+Backspace para parar; Ctrl+Alt+P para pausar/retomar.");
+            ui.weak("Arraste áudios para importar. Atalhos por som em Editar. Ctrl+Alt+Backspace para parar, Ctrl+Alt+P para pausar.");
             if !self.status.is_empty() {
                 ui.label(&self.status);
             }
             ui.separator();
+                });
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let query = self.search.trim().to_lowercase();
                 let visible: Vec<_> = self
@@ -1208,7 +1414,7 @@ impl eframe::App for Board {
                     let clip = &self.clips[i];
                     let path = clip.path.clone();
                     let mut action = 0;
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         if ui.button("▶ Tocar").clicked() { action = 1; }
                         if ui.button("⏹ Parar").clicked() { action = 2; }
                         if ui.selectable_label(self.selected.as_ref() == Some(&path), &clip.title).clicked() {
@@ -1253,8 +1459,14 @@ impl eframe::App for Board {
                     ui.text_edit_singleline(&mut clip.title);
                     ui.label("Categoria");
                     ui.text_edit_singleline(&mut clip.category);
-                    ui.label("Atalho global (ex. Ctrl+Alt+F1)");
-                    ui.text_edit_singleline(&mut clip.key);
+                    ui.label("Atalho global do som");
+                    ui.horizontal(|ui| {
+                        ui.text_edit_singleline(&mut clip.key);
+                        if ui.button("Limpar").clicked() {
+                            clip.key.clear();
+                        }
+                    });
+                    ui.weak("Exemplos: Ctrl+Alt+F1 ou Ctrl+Alt+1. Cada som precisa de um atalho diferente.");
                     ui.add(
                         egui::Slider::new(&mut clip.gain_percent, 0.0..=200.0)
                             .text("Volume deste som (%)"),
@@ -1638,16 +1850,43 @@ pub(super) fn run(start_hidden: bool) -> Result<()> {
     let startup_status = String::new();
     #[cfg(windows)]
     let tray = create_tray()?;
+    #[cfg(windows)]
+    let (tray_event_tx, tray_event_rx) = mpsc::channel();
+    #[cfg(windows)]
+    let (tray_menu_tx, tray_menu_rx) = mpsc::channel();
     let (waveform_tx, waveform_rx) = mpsc::channel();
+    let (download_tx, download_rx) = mpsc::channel();
     eframe::run_native(
         "getSoundBoard",
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_visible(!start_hidden)
+                .with_inner_size([1120.0, 820.0])
+                .with_min_inner_size([720.0, 650.0])
                 .with_icon(app_icon()),
             ..Default::default()
         },
-        Box::new(move |_| {
+        Box::new(move |creation_context| {
+            #[cfg(windows)]
+            let exit_requested = Arc::new(AtomicBool::new(false));
+            #[cfg(windows)]
+            {
+                let ctx = creation_context.egui_ctx.clone();
+                TrayIconEvent::set_event_handler(Some(move |event| {
+                    let _ = tray_event_tx.send(event);
+                    ctx.request_repaint();
+                }));
+                let ctx = creation_context.egui_ctx.clone();
+                let exit = exit_requested.clone();
+                MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
+                    if event.id().as_ref() == "exit" {
+                        exit.store(true, Ordering::Release);
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                    let _ = tray_menu_tx.send(event);
+                    ctx.request_repaint();
+                }));
+            }
             let keys = GlobalHotKeyManager::new();
             let status = keys
                 .as_ref()
@@ -1669,6 +1908,10 @@ pub(super) fn run(start_hidden: bool) -> Result<()> {
                 edit: None,
                 recording: None,
                 search: String::new(),
+                download_url: String::new(),
+                download_busy: false,
+                download_tx,
+                download_rx,
                 category: String::new(),
                 paused: false,
                 selected: None,
@@ -1681,7 +1924,11 @@ pub(super) fn run(start_hidden: bool) -> Result<()> {
                 #[cfg(windows)]
                 _tray: tray,
                 #[cfg(windows)]
-                exit_requested: false,
+                exit_requested,
+                #[cfg(windows)]
+                tray_event_rx,
+                #[cfg(windows)]
+                tray_menu_rx,
             };
             board.bind();
             if !board.settings.speakers.is_empty() {
