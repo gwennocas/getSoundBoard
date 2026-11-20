@@ -1,0 +1,58 @@
+name: Build and release Rust for Windows
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --check
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - uses: actions/upload-artifact@v4
+        with:
+          name: getSoundBoard-rust-windows-x64
+          path: rust/target/release/getSoundBoard.exe
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages[0].version
+          if ($env:GITHUB_REF -like 'refs/tags/v*' -and $env:GITHUB_REF.Substring(11) -ne $version) { throw "Tag version must match Cargo.toml version $version" }
+          $publishDir = (Resolve-Path target/release).Path
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DPublishDir=$publishDir" "/DAppVersion=$version" ..\installer\getSoundBoard-rust.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: getSoundBoard-rust-windows-x64-installer
+          path: artifacts/installer/getSoundBoard-*-rust-win-x64-setup.exe
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: getSoundBoard-rust-windows-x64-installer
+          path: artifacts/installer
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/installer/getSoundBoard-*-rust-win-x64-setup.exe
+          generate_release_notes: true

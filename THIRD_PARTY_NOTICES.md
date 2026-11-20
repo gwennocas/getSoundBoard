@@ -1,6 +1,6 @@
-# Avisos de terceiros: RNNoise
+# Avisos de terceiros: RNNoise e nnnoiseless
 
-O getSoundBoard inclui [RNNoise.NET](https://github.com/Yellow-Dog-Man/RNNoise.Net) e a biblioteca nativa [RNNoise](https://github.com/xiph/rnnoise) para a supressão opcional de ruído do microfone.
+O getSoundBoard inclui [RNNoise.NET](https://github.com/Yellow-Dog-Man/RNNoise.Net) e a biblioteca nativa [RNNoise](https://github.com/xiph/rnnoise) na versão C#. O motor Rust usa [nnnoiseless](https://github.com/jneem/nnnoiseless), uma implementação Rust de RNNoise. Essas bibliotecas oferecem supressão opcional de ruído do microfone.
 
 ## RNNoise.NET — MIT
 
@@ -26,8 +26,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## RNNoise — BSD-3-Clause
+## RNNoise e nnnoiseless — BSD-3-Clause
 
+Copyright (c) 2020, Joe Neeman
 Copyright (c) 2007-2017, 2024 Jean-Marc Valin
 Copyright (c) 2023 Amazon
 Copyright (c) 2017, Mozilla

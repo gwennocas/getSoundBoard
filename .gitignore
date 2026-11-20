@@ -10,3 +10,4 @@ artifacts/
 dotnet-install.ps1
 .inno/
 innosetup-*.exe
+/rust/target/
